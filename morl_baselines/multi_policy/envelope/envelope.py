@@ -468,7 +468,8 @@ class Envelope(MOPolicy, MOAgent):
         eval_env: Optional[gym.Env] = None,
         ref_point: Optional[np.ndarray] = None,
         known_pareto_front: Optional[List[np.ndarray]] = None,
-        weight: Optional[np.ndarray] = None,
+        train_weights: Optional[np.ndarray] = None, # REFERENCE ASAD JEEWA
+        eval_weights: Optional[np.ndarray] = None, # REFERENCE ASAD JEEWA
         total_episodes: Optional[int] = None,
         reset_num_timesteps: bool = True,
         eval_freq: int = 10000,
@@ -495,6 +496,7 @@ class Envelope(MOPolicy, MOAgent):
             reset_learning_starts: whether to reset the learning starts. Useful when training multiple times.
             verbose: whether to print the episode info.
         """
+        print("The changes are working")
         if eval_env is not None:
             assert ref_point is not None, "Reference point must be provided for the hypervolume computation."
         if self.log:
@@ -503,7 +505,10 @@ class Envelope(MOPolicy, MOAgent):
                     "total_timesteps": total_timesteps,
                     "ref_point": ref_point.tolist() if ref_point is not None else None,
                     "known_front": known_pareto_front,
-                    "weight": weight.tolist() if weight is not None else None,
+
+                    "train_weights": weight.tolist() if weight is not None else None, # REFERENCE ASAD JEEWA
+
+                    "eval_weights": weight.tolist() if weight is not None else None, # REFERENCE ASAD JEEWA
                     "total_episodes": total_episodes,
                     "reset_num_timesteps": reset_num_timesteps,
                     "eval_freq": eval_freq,
@@ -519,11 +524,23 @@ class Envelope(MOPolicy, MOAgent):
         if reset_learning_starts:  # Resets epsilon-greedy exploration
             self.learning_starts = self.global_step
 
-        num_episodes = 0
-        eval_weights = equally_spaced_weights(self.reward_dim, n=num_eval_weights_for_front)
-        obs, _ = self.env.reset()
+        self.train_weights = train_weights # REFERENCE ASAD JEEWA
+        self.eval_weights = eval_weights # REFERENCE ASAD JEEWA
 
-        w = weight if weight is not None else random_weights(self.reward_dim, 1, dist="gaussian", rng=self.np_random)
+        num_episodes = 0
+        
+        # REFERENCE ASAD JEEWA
+        if eval_weights is None:
+            eval_weights = equally_spaced_weights(self.reward_dim, n=num_eval_weights_for_front)
+
+        obs, _ = self.env.reset()
+        
+        # REFERENCE ASAD JEEWA
+        if train_weights is not None:
+            weight_index = 0
+            w = train_weights[weight_index]
+        else:
+            w = weight if weight is not None else random_weights(self.reward_dim, 1, dist="gaussian", rng=self.np_random)
         tensor_w = th.tensor(w).float().to(self.device)
 
         for _ in range(1, total_timesteps + 1):
@@ -563,10 +580,14 @@ class Envelope(MOPolicy, MOAgent):
 
                 if self.log and "episode" in info.keys():
                     log_episode_info(info["episode"], np.dot, w, self.global_step, verbose=verbose)
+                
 
-                if weight is None:
+                if train_weights is not None:
+                    weight_index = (weight_index + 1) % len(train_weights)
+                    w = train_weights[weight_index]
+                else:
                     w = random_weights(self.reward_dim, 1, dist="gaussian", rng=self.np_random)
-                    tensor_w = th.tensor(w).float().to(self.device)
+                tensor_w = th.tensor(w).float().to(self.device)
 
             else:
                 obs = next_obs

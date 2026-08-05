@@ -420,7 +420,7 @@ class GPIPD(MOPolicy, MOAgent):
             if self.per:
                 s_obs, s_actions, s_rewards, s_next_obs, s_dones, idxes = self._sample_batch_experiences()
             else:
-                s_obs, s_actions, s_rewards, s_next_obs, s_dones = self._sample_batch_experiences()
+                s_obs, s_actions, s_rewards, s_next_obs, s_dones, _ = self._sample_batch_experiences()
 
             if len(self.weight_support) > 1:
                 s_obs, s_actions, s_rewards, s_next_obs, s_dones = (
@@ -801,6 +801,8 @@ class GPIPD(MOPolicy, MOAgent):
         eval_freq: int = 1000,
         eval_mo_freq: int = 10000,
         checkpoints: bool = True,
+        eval_weights: Optional[np.ndarray] = None,
+        train_weights: Optional[np.ndarray] = None,
     ):
         """Train agent.
 
@@ -831,14 +833,16 @@ class GPIPD(MOPolicy, MOAgent):
                     "weight_selection_algo": weight_selection_algo,
                     "eval_freq": eval_freq,
                     "eval_mo_freq": eval_mo_freq,
+                    "eval_weights": eval_weights,
+                    "train_weights": train_weights,
                 }
             )
         max_iter = total_timesteps // timesteps_per_iter
         linear_support = LinearSupport(num_objectives=self.reward_dim, epsilon=0.0 if weight_selection_algo == "ols" else None)
 
         weight_history = []
-
-        eval_weights = equally_spaced_weights(self.reward_dim, n=num_eval_weights_for_front)
+        if eval_weights is None:
+            eval_weights = equally_spaced_weights(self.reward_dim, n=num_eval_weights_for_front)
 
         for iter in range(1, max_iter + 1):
             if weight_selection_algo == "ols" or weight_selection_algo == "gpi-ls":
@@ -855,6 +859,11 @@ class GPIPD(MOPolicy, MOAgent):
 
                 if w is None:
                     break
+
+            elif weight_selection_algo == "set":
+                w = train_weights[(iter - 1) % len(train_weights)]
+                self.set_weight_support(train_weights[(iter - 1) % len(train_weights) + 1])
+
             else:
                 raise ValueError(f"Unknown algorithm {weight_selection_algo}.")
 
@@ -864,6 +873,8 @@ class GPIPD(MOPolicy, MOAgent):
                 M = linear_support.get_weight_support() + linear_support.get_corner_weights(top_k=4) + [w]
             elif weight_selection_algo == "ols":
                 M = linear_support.get_weight_support() + [w]
+            elif weight_selection_algo == "set":
+                M = self.weight_support
             else:
                 M = None
 

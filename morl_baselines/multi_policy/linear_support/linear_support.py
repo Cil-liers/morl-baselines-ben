@@ -79,6 +79,8 @@ class LinearSupport:
         """
         if len(self.ccs) > 0:
             W_corner = self.compute_corner_weights()
+            # Could make a change here to filter out certain weights.
+            # It would not be exactly the amount that the other one has.
             if self.verbose:
                 print("W_corner:", W_corner, "W_corner size:", len(W_corner))
 
@@ -345,7 +347,7 @@ class LinearSupport:
             corner_weight = np.abs(corner_weight)
             corner_weight /= corner_weight.sum()
             corners.append(corner_weight)
-
+        print(corners)
         return corners
 
     def is_dominated(self, value: np.ndarray) -> bool:
